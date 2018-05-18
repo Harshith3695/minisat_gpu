@@ -1,7 +1,12 @@
 #include <iostream>
+#define N 1024
 
 namespace GPU_KERNEL{
 using namespace std;
+
+	__shared__ int UE_list[N];
+
+	__shared__ int UE_threads[N];
 
 	__device__
 	int var_f(int blocker){
@@ -19,8 +24,20 @@ using namespace std;
 	void propagate_kernel(int *dev_Lit, int *dev_N, int *dev_blockers, int *dev_flags, int *dev_clauses, int *dev_cindex, int *dev_assigns)
 	{
 
-		int tid = blockIdx.x;
+		int tid = threadIdx.x;
 		if(tid < *dev_N){
+
+			if(tid == 0){
+				int p, q;
+				for(p=0;p<=(*dev_N);p++){
+					UE_list[p] = -2;
+					UE_threads[p] = -2;
+					if(p == (*dev_N)){
+						UE_list[p] = -1;
+						UE_threads[p] = -1;
+					}
+				}
+			}
 
 			int value_1 = (dev_assigns[var_f(dev_blockers[tid])]) ^ (sign_f(dev_blockers[tid]));
 			if (value_1 == 0){
@@ -33,6 +50,20 @@ using namespace std;
 				dev_flags[tid] = dev_flags[tid] | 16;}
 
 			int first = dev_clauses[dev_cindex[tid]];
+
+			UE_threads[tid] = tid, UE_list[tid] = first;
+
+//			int cnt = 0;
+//			for(int x=0; UE_list[x] != -1; x++){
+//				for(int y=x+1; UE_list[y] != -1; y++){
+//					while(UE_list[x] != -2){
+//						if(UE_list[x] == UE_list[y])
+//							cnt++;
+//					}
+//				}
+//			}
+
+
 			int value_2 = dev_assigns[var_f(first)] ^ sign_f(first);
 			if(first != dev_blockers[tid] && value_2 == 0){
 				dev_flags[tid] = dev_flags[tid] | 8;
@@ -48,21 +79,36 @@ using namespace std;
 			}
 
 			int value_4 = dev_assigns[var_f(first)] ^ sign_f(first);
-//			printf("value_4 = %d, Kernel = %d\n", value_4, tid);
 			if(value_4 == 1){
 				dev_flags[tid] = dev_flags[tid] | 2;
 			}else{
-				atomicAdd(&(dev_assigns[var_f(first)]), sign_f(first));
-//			printf("tp = %d, Kernel = %d\n", tp, tid);
+	 			dev_assigns[var_f(first)] = (sign_f(first));
 				dev_flags[tid] = dev_flags[tid] | 1;
+
+				for(int a=0;a<=(*dev_N);a++){
+					if(((UE_threads[a] != -2) && (UE_threads[a] != -1)) && (UE_threads[a] == tid)){
+						for(int b=0;UE_list[b] != -1;b++){
+							printf("UE_list[%d] = %d, Address = %p, tid = %d\n", a, UE_list[b], &UE_list[b], tid);
+						}
+					}
+					break;
+				}
 			}
 
 			kernel_end:
 			__syncthreads();
 		}
 	}
-
 };
+
+
+
+//			if(tid == 0){
+//			for(int a=0;a<=(*dev_N);a++){
+//				printf("UE_list[%d] = %d, Address = %p\n", a, UE_list[a], &UE_list[a]);
+//				printf("UE_threads[%d] = %d, Address = %p\n", a, UE_threads[a], &UE_threads[a]);
+//				}
+//			}
 
 
 //		printf("Kernel = %d\n", tid);
@@ -89,3 +135,6 @@ using namespace std;
 //				printf("assertion true proceed!");
 //			}
 //			printf("tid = %d, Kernel_blocker = %d, value_1 = %d\n", tid, dev_blockers[tid], value_1);
+
+
+// 			atomicAdd(&(dev_assigns[var_f(first)]), sign_f(first));
